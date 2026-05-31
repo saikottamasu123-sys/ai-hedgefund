@@ -5,8 +5,15 @@ Fetches a financial snapshot for a ticker using yfinance.
 Returns a FinancialData model, or raises on failure.
 """
 
+import os
+
 import yfinance as yf
+from edgar import Company, set_identity
+
 from workflows.state import FinancialData
+
+# Tell SEC EDGAR who we are — required User-Agent string
+set_identity(os.getenv("EDGAR_IDENTITY", "ai-investments research@example.com"))
 
 
 def fetch_financial_data(ticker: str) -> FinancialData:
@@ -37,6 +44,33 @@ def fetch_financial_data(ticker: str) -> FinancialData:
         fifty_two_week_low=safe_get("fiftyTwoWeekLow"),
         summary=safe_get("longBusinessSummary", "No business summary available."),
     )
+
+
+def fetch_edgar_filing(ticker: str, max_chars: int = 8000) -> dict | None:
+    """
+    Fetches the most recent 10-K or 10-Q for a ticker using edgartools.
+    Returns a dict with keys: form, filing_date, accession_no, text
+    Returns None on failure (non-fatal — pipeline continues without it).
+    """
+    try:
+        company = Company(ticker)
+        filings = company.get_filings(form=["10-K", "10-Q"]).latest(1)
+
+        if not filings:
+            return None
+
+        # latest(1) returns a filing object directly; handle both list and single
+        latest = filings[0] if hasattr(filings, "__getitem__") else filings
+
+        text = latest.text()
+        return {
+            "form": latest.form,
+            "filing_date": str(latest.filing_date),
+            "accession_no": latest.accession_no,
+            "text": text[:max_chars],
+        }
+    except Exception:
+        return None
 
 
 def format_financial_context(data: FinancialData) -> str:

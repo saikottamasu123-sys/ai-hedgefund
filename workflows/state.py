@@ -53,6 +53,7 @@ class CommitteeState(TypedDict):
     # ── Research Coordinator output ────────────────────────────────────────
     financial_data: Optional[FinancialData]
     research_summary: str               # plain-text context passed to agents
+    edgar_filing: Optional[dict]        # { form, filing_date, accession_no, text }
 
     # ── Analyst agent outputs ──────────────────────────────────────────────
     bull_opinion: Optional[AnalystOpinion]

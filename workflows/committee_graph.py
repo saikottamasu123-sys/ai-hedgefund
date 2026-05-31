@@ -76,6 +76,7 @@ def run_committee(ticker: str) -> CommitteeState:
         "ticker": ticker.upper(),
         "financial_data": None,
         "research_summary": "",
+        "edgar_filing": None,
         "bull_opinion": None,
         "bear_opinion": None,
         "risk_opinion": None,

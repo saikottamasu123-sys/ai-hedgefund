@@ -36,6 +36,10 @@ Prepare a research brief for the investment committee on:
 
 {financial_context}
 
+The financial context above may include an SEC EDGAR filing excerpt (10-K or 10-Q).
+If present, use it — it contains management's own words on business performance, risks,
+and forward-looking statements, which are more authoritative than derived metrics alone.
+
 Focus on:
 1. Business model and competitive position
 2. Recent financial performance trends

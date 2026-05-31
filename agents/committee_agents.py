@@ -11,7 +11,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from workflows.state import CommitteeState, AnalystOpinion, FinancialData
-from tools.financial_data import fetch_financial_data, format_financial_context
+from tools.financial_data import fetch_financial_data, format_financial_context, fetch_edgar_filing
 from prompts.agent_prompts import (
     ANALYST_OUTPUT_INSTRUCTIONS,
     COORDINATOR_SYSTEM,
@@ -77,6 +77,23 @@ def research_coordinator(state: CommitteeState) -> dict:
 
     financial_context = format_financial_context(financial_data)
 
+    # ── SEC EDGAR filing (non-fatal) ──────────────────────────────────────
+    print(f"[Coordinator] Fetching SEC EDGAR filing for {ticker}...")
+    edgar_filing = fetch_edgar_filing(ticker)
+
+    if edgar_filing:
+        filing_block = (
+            f"\n\n=== SEC EDGAR FILING ===\n"
+            f"Form: {edgar_filing['form']}  |  Filed: {edgar_filing['filing_date']}\n\n"
+            f"{edgar_filing['text']}\n"
+            f"=== END FILING ==="
+        )
+        financial_context += filing_block
+        print(f"[Coordinator] EDGAR filing attached ({edgar_filing['form']}, {len(edgar_filing['text'])} chars)")
+    else:
+        errors.append(f"EDGAR filing fetch failed or unavailable for {ticker} — proceeding without it.")
+        print(f"[Coordinator] No EDGAR filing found — continuing with Yahoo Finance data only.")
+
     user_prompt = COORDINATOR_USER.format(financial_context=financial_context)
     research_summary = _call_llm(COORDINATOR_SYSTEM, user_prompt, temperature=0.2)
 
@@ -85,6 +102,7 @@ def research_coordinator(state: CommitteeState) -> dict:
     return {
         "financial_data": financial_data,
         "research_summary": research_summary,
+        "edgar_filing": edgar_filing,
         "errors": errors,
     }
 
