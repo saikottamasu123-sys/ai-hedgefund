@@ -60,6 +60,11 @@ class CommitteeState(TypedDict):
     bear_opinion: Optional[AnalystOpinion]
     risk_opinion: Optional[AnalystOpinion]
 
+    # ── Rebuttal round outputs ─────────────────────────────────────────────
+    bull_rebuttal: Optional[AnalystOpinion]
+    bear_rebuttal: Optional[AnalystOpinion]
+    risk_rebuttal: Optional[AnalystOpinion]
+
     # ── Portfolio Manager output ───────────────────────────────────────────
     final_recommendation: str           # "BUY" | "HOLD" | "SELL"
     final_confidence: float

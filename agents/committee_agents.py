@@ -11,7 +11,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from workflows.state import CommitteeState, AnalystOpinion, FinancialData
-from tools.financial_data import fetch_financial_data, format_financial_context, fetch_edgar_filing_rag
+from tools.financial_data import fetch_financial_data, format_financial_context, fetch_edgar_filing
 from prompts.agent_prompts import (
     ANALYST_OUTPUT_INSTRUCTIONS,
     COORDINATOR_SYSTEM,
@@ -19,6 +19,9 @@ from prompts.agent_prompts import (
     BULL_SYSTEM, BULL_USER,
     BEAR_SYSTEM, BEAR_USER,
     RISK_SYSTEM, RISK_USER,
+    BULL_REBUTTAL_USER,
+    BEAR_REBUTTAL_USER,
+    RISK_REBUTTAL_USER,
     PORTFOLIO_MANAGER_SYSTEM,
     PORTFOLIO_MANAGER_USER,
 )
@@ -28,7 +31,7 @@ from prompts.agent_prompts import (
 
 def get_llm(temperature: float = 0.3):
     return ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash",
+        model="gemini-2.5-flash-lite",
         temperature=temperature,
         google_api_key=os.getenv("GOOGLE_API_KEY"),
     )
@@ -79,7 +82,7 @@ def research_coordinator(state: CommitteeState) -> dict:
 
     # ── SEC EDGAR filing (non-fatal) ──────────────────────────────────────
     print(f"[Coordinator] Fetching SEC EDGAR filing for {ticker}...")
-    edgar_filing = fetch_edgar_filing_rag(ticker)
+    edgar_filing = fetch_edgar_filing(ticker)
 
     if edgar_filing:
         filing_block = (
@@ -176,14 +179,14 @@ def risk_manager(state: CommitteeState) -> dict:
     return {"risk_opinion": opinion}
 
 
-# ── Node 5: Portfolio Manager ─────────────────────────────────────────────────
+# ── Node 5: Bull Rebuttal ─────────────────────────────────────────────────────
 
-def portfolio_manager(state: CommitteeState) -> dict:
+def bull_rebuttal(state: CommitteeState) -> dict:
     """
-    Synthesises all analyst opinions into a final recommendation and report.
-    Populates: final_recommendation, final_confidence, final_report
+    Bull Analyst responds to the bear and risk arguments.
+    Populates: bull_rebuttal
     """
-    print("[Portfolio Manager] Deliberating...")
+    print("[Bull Analyst] Rebutting bear and risk cases...")
 
     bull = state["bull_opinion"]
     bear = state["bear_opinion"]
@@ -192,10 +195,128 @@ def portfolio_manager(state: CommitteeState) -> dict:
     def fmt_points(points: list[str]) -> str:
         return "\n".join(f"  • {p}" for p in points)
 
+    user_prompt = BULL_REBUTTAL_USER.format(
+        bull_rec=bull.recommendation,
+        bull_conf=bull.confidence,
+        bull_reasoning=bull.reasoning,
+        bear_rec=bear.recommendation,
+        bear_conf=bear.confidence,
+        bear_reasoning=bear.reasoning,
+        bear_points=fmt_points(bear.key_points),
+        risk_rec=risk.recommendation,
+        risk_conf=risk.confidence,
+        risk_reasoning=risk.reasoning,
+        risk_points=fmt_points(risk.key_points),
+        output_instructions=ANALYST_OUTPUT_INSTRUCTIONS,
+    )
+
+    raw = _call_llm(BULL_SYSTEM, user_prompt)
+    rebuttal = _parse_analyst_json(raw, role="bull")
+
+    print(f"[Bull Analyst] Rebuttal: {rebuttal.recommendation} ({rebuttal.confidence:.0%})")
+    return {"bull_rebuttal": rebuttal}
+
+
+# ── Node 6: Bear Rebuttal ─────────────────────────────────────────────────────
+
+def bear_rebuttal(state: CommitteeState) -> dict:
+    """
+    Bear Analyst responds to the bull and risk arguments.
+    Populates: bear_rebuttal
+    """
+    print("[Bear Analyst] Rebutting bull and risk cases...")
+
+    bull = state["bull_opinion"]
+    bear = state["bear_opinion"]
+    risk = state["risk_opinion"]
+
+    def fmt_points(points: list[str]) -> str:
+        return "\n".join(f"  • {p}" for p in points)
+
+    user_prompt = BEAR_REBUTTAL_USER.format(
+        bear_rec=bear.recommendation,
+        bear_conf=bear.confidence,
+        bear_reasoning=bear.reasoning,
+        bull_rec=bull.recommendation,
+        bull_conf=bull.confidence,
+        bull_reasoning=bull.reasoning,
+        bull_points=fmt_points(bull.key_points),
+        risk_rec=risk.recommendation,
+        risk_conf=risk.confidence,
+        risk_reasoning=risk.reasoning,
+        risk_points=fmt_points(risk.key_points),
+        output_instructions=ANALYST_OUTPUT_INSTRUCTIONS,
+    )
+
+    raw = _call_llm(BEAR_SYSTEM, user_prompt)
+    rebuttal = _parse_analyst_json(raw, role="bear")
+
+    print(f"[Bear Analyst] Rebuttal: {rebuttal.recommendation} ({rebuttal.confidence:.0%})")
+    return {"bear_rebuttal": rebuttal}
+
+
+# ── Node 7: Risk Rebuttal ─────────────────────────────────────────────────────
+
+def risk_rebuttal(state: CommitteeState) -> dict:
+    """
+    Risk Manager responds to the bull and bear arguments.
+    Populates: risk_rebuttal
+    """
+    print("[Risk Manager] Rebutting bull and bear cases...")
+
+    bull = state["bull_opinion"]
+    bear = state["bear_opinion"]
+    risk = state["risk_opinion"]
+
+    def fmt_points(points: list[str]) -> str:
+        return "\n".join(f"  • {p}" for p in points)
+
+    user_prompt = RISK_REBUTTAL_USER.format(
+        risk_rec=risk.recommendation,
+        risk_conf=risk.confidence,
+        risk_reasoning=risk.reasoning,
+        bull_rec=bull.recommendation,
+        bull_conf=bull.confidence,
+        bull_reasoning=bull.reasoning,
+        bull_points=fmt_points(bull.key_points),
+        bear_rec=bear.recommendation,
+        bear_conf=bear.confidence,
+        bear_reasoning=bear.reasoning,
+        bear_points=fmt_points(bear.key_points),
+        output_instructions=ANALYST_OUTPUT_INSTRUCTIONS,
+    )
+
+    raw = _call_llm(RISK_SYSTEM, user_prompt)
+    rebuttal = _parse_analyst_json(raw, role="risk")
+
+    print(f"[Risk Manager] Rebuttal: {rebuttal.recommendation} ({rebuttal.confidence:.0%})")
+    return {"risk_rebuttal": rebuttal}
+
+
+# ── Node 8: Portfolio Manager ─────────────────────────────────────────────────
+
+def portfolio_manager(state: CommitteeState) -> dict:
+    """
+    Synthesises all analyst opinions (both rounds) into a final recommendation and report.
+    Populates: final_recommendation, final_confidence, final_report
+    """
+    print("[Portfolio Manager] Deliberating...")
+
+    bull = state["bull_opinion"]
+    bear = state["bear_opinion"]
+    risk = state["risk_opinion"]
+    bull_reb = state["bull_rebuttal"]
+    bear_reb = state["bear_rebuttal"]
+    risk_reb = state["risk_rebuttal"]
+
+    def fmt_points(points: list[str]) -> str:
+        return "\n".join(f"  • {p}" for p in points)
+
     financial_context = format_financial_context(state["financial_data"])
 
     user_prompt = PORTFOLIO_MANAGER_USER.format(
         ticker=state["ticker"],
+        # Round 1
         bull_rec=bull.recommendation,
         bull_conf=bull.confidence,
         bull_reasoning=bull.reasoning,
@@ -208,6 +329,19 @@ def portfolio_manager(state: CommitteeState) -> dict:
         risk_conf=risk.confidence,
         risk_reasoning=risk.reasoning,
         risk_points=fmt_points(risk.key_points),
+        # Round 2
+        bull_reb_rec=bull_reb.recommendation,
+        bull_reb_conf=bull_reb.confidence,
+        bull_reb_reasoning=bull_reb.reasoning,
+        bull_reb_points=fmt_points(bull_reb.key_points),
+        bear_reb_rec=bear_reb.recommendation,
+        bear_reb_conf=bear_reb.confidence,
+        bear_reb_reasoning=bear_reb.reasoning,
+        bear_reb_points=fmt_points(bear_reb.key_points),
+        risk_reb_rec=risk_reb.recommendation,
+        risk_reb_conf=risk_reb.confidence,
+        risk_reb_reasoning=risk_reb.reasoning,
+        risk_reb_points=fmt_points(risk_reb.key_points),
         financial_context=financial_context,
     )
 

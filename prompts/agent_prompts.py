@@ -13,7 +13,7 @@ Respond ONLY with a valid JSON object — no markdown fences, no preamble.
 Schema:
 {
   "recommendation": "BUY" | "HOLD" | "SELL",
-  "confidence": <float 0.0-1.0>,
+  "confidence": <float 0.0–1.0>,
   "reasoning": "<2-3 sentence explanation>",
   "key_points": ["<point 1>", "<point 2>", "<point 3>"]
 }
@@ -36,9 +36,9 @@ Prepare a research brief for the investment committee on:
 
 {financial_context}
 
-The SEC EDGAR excerpt below contains the most relevant passages retrieved from the filing
-(covering financials, risks, management outlook, and guidance) — not raw truncated text.
-Treat it as the most authoritative source in the brief.
+The financial context above may include an SEC EDGAR filing excerpt (10-K or 10-Q).
+If present, use it — it contains management's own words on business performance, risks,
+and forward-looking statements, which are more authoritative than derived metrics alone.
 
 Focus on:
 1. Business model and competitive position
@@ -129,6 +129,80 @@ Assess the risks. What are the most significant threats to this investment?
 {output_instructions}
 """
 
+# ── Rebuttal Round ───────────────────────────────────────────────────────────
+
+BULL_REBUTTAL_USER = """
+You are the Bull Analyst. You have just heard the bear case and risk assessment.
+Now respond directly to their arguments and defend or refine your position.
+
+YOUR INITIAL POSITION ({bull_rec} | {bull_conf:.0%} confidence)
+{bull_reasoning}
+
+BEAR ANALYST ARGUES ({bear_rec} | {bear_conf:.0%} confidence):
+{bear_reasoning}
+Key points:
+{bear_points}
+
+RISK MANAGER ARGUES ({risk_rec} | {risk_conf:.0%} confidence):
+{risk_reasoning}
+Key points:
+{risk_points}
+
+Address their specific concerns. Where do you concede ground? Where do you push back?
+You may maintain, strengthen, or revise your recommendation based on their arguments —
+but every change must be justified by their actual points, not by capitulation.
+
+{output_instructions}
+"""
+
+BEAR_REBUTTAL_USER = """
+You are the Bear Analyst. You have just heard the bull case and risk assessment.
+Now respond directly to their arguments and defend or refine your position.
+
+YOUR INITIAL POSITION ({bear_rec} | {bear_conf:.0%} confidence)
+{bear_reasoning}
+
+BULL ANALYST ARGUES ({bull_rec} | {bull_conf:.0%} confidence):
+{bull_reasoning}
+Key points:
+{bull_points}
+
+RISK MANAGER ARGUES ({risk_rec} | {risk_conf:.0%} confidence):
+{risk_reasoning}
+Key points:
+{risk_points}
+
+Address their specific points. Where do you concede ground? Where do you push back?
+You may maintain, strengthen, or revise your recommendation based on their arguments —
+but every change must be justified by their actual points, not by capitulation.
+
+{output_instructions}
+"""
+
+RISK_REBUTTAL_USER = """
+You are the Risk Manager. You have just heard the bull and bear cases.
+Now respond to their arguments and confirm or update your risk assessment.
+
+YOUR INITIAL POSITION ({risk_rec} | {risk_conf:.0%} confidence)
+{risk_reasoning}
+
+BULL ANALYST ARGUES ({bull_rec} | {bull_conf:.0%} confidence):
+{bull_reasoning}
+Key points:
+{bull_points}
+
+BEAR ANALYST ARGUES ({bear_rec} | {bear_conf:.0%} confidence):
+{bear_reasoning}
+Key points:
+{bear_points}
+
+Do the bull or bear arguments surface new risks or mitigate existing ones?
+You may maintain, strengthen, or revise your recommendation based on their arguments —
+but every change must be justified by their actual points, not by capitulation.
+
+{output_instructions}
+"""
+
 # ── Portfolio Manager ─────────────────────────────────────────────────────────
 
 PORTFOLIO_MANAGER_SYSTEM = """
@@ -145,7 +219,9 @@ Be decisive. Acknowledge uncertainty but do not hide behind it.
 """
 
 PORTFOLIO_MANAGER_USER = """
-The committee has completed its analysis of {ticker}.
+The committee has completed a two-round debate on {ticker}.
+
+=== ROUND 1: INITIAL POSITIONS ===
 
 BULL ANALYST ({bull_rec} | {bull_conf:.0%} confidence)
 {bull_reasoning}
@@ -169,6 +245,30 @@ RISK MANAGER ({risk_rec} | {risk_conf:.0%} confidence)
 Key points:
 {risk_points}
 
+=== ROUND 2: REBUTTALS ===
+
+BULL REBUTTAL ({bull_reb_rec} | {bull_reb_conf:.0%} confidence)
+{bull_reb_reasoning}
+
+Key points:
+{bull_reb_points}
+
+---
+
+BEAR REBUTTAL ({bear_reb_rec} | {bear_reb_conf:.0%} confidence)
+{bear_reb_reasoning}
+
+Key points:
+{bear_reb_points}
+
+---
+
+RISK REBUTTAL ({risk_reb_rec} | {risk_reb_conf:.0%} confidence)
+{risk_reb_reasoning}
+
+Key points:
+{risk_reb_points}
+
 ---
 
 FINANCIAL SNAPSHOT
@@ -184,16 +284,19 @@ Write a final investment committee report in this exact markdown format:
 [2-3 sentences summarising the overall picture]
 
 ## Bull Case
-[Strongest arguments for buying]
+[Strongest arguments for buying, incorporating both rounds]
 
 ## Bear Case
-[Strongest arguments against]
+[Strongest arguments against, incorporating both rounds]
 
 ## Risk Assessment
 [Key risks and how they affect position sizing]
 
+## Debate Highlights
+[Where analysts held firm, where they conceded ground, and what that signals]
+
 ## Committee Discussion
-[Where analysts agreed and disagreed, and why it matters]
+[Where analysts agreed and disagreed after both rounds, and why it matters]
 
 ## Final Recommendation
 
