@@ -9,6 +9,10 @@ import os
 
 import yfinance as yf
 from edgar import Company, set_identity
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.vectorstores import Chroma
+import chromadb
 
 from workflows.state import FinancialData
 
@@ -48,9 +52,9 @@ def fetch_financial_data(ticker: str) -> FinancialData:
 
 def fetch_edgar_filing(ticker: str, max_chars: int = 8000) -> dict | None:
     """
-    Fetches the most recent 10-K or 10-Q for a ticker using edgartools.
-    Returns a dict with keys: form, filing_date, accession_no, text
-    Returns None on failure (non-fatal — pipeline continues without it).
+    Original fetch_edgar_filing — kept as fallback.
+    Fetches the most recent 10-K or 10-Q and truncates to max_chars.
+    Returns None on failure.
     """
     try:
         company = Company(ticker)
@@ -59,7 +63,6 @@ def fetch_edgar_filing(ticker: str, max_chars: int = 8000) -> dict | None:
         if not filings:
             return None
 
-        # latest(1) returns a filing object directly; handle both list and single
         latest = filings[0] if hasattr(filings, "__getitem__") else filings
 
         text = latest.text()
@@ -69,6 +72,102 @@ def fetch_edgar_filing(ticker: str, max_chars: int = 8000) -> dict | None:
             "accession_no": latest.accession_no,
             "text": text[:max_chars],
         }
+    except Exception:
+        return None
+
+
+QUERY_STRINGS = [
+    "revenue growth and financial performance",
+    "risk factors and business risks",
+    "management discussion and outlook",
+    "operating expenses and profit margins",
+    "guidance and forward looking statements",
+]
+
+
+def fetch_edgar_filing_rag(ticker: str, top_k: int = 5) -> dict | None:
+    """
+    Fetches the most recent 10-K or 10-Q for a ticker and uses RAG to retrieve
+    the most investment-relevant passages instead of raw truncated text.
+
+    Pipeline:
+      1. Fetch full filing text (no truncation)
+      2. Chunk with RecursiveCharacterTextSplitter
+      3. Embed chunks locally with all-MiniLM-L6-v2 (no API calls, no rate limits)
+      4. Store in an ephemeral ChromaDB in-memory collection
+      5. Query with fixed investment-relevant questions
+      6. Deduplicate and return retrieved chunks
+
+    Returns a dict with keys: form, filing_date, accession_no, text
+    Returns None on any failure (non-fatal — pipeline continues without it).
+    """
+    try:
+        # ── 1. Fetch full filing ──────────────────────────────────────────────
+        company = Company(ticker)
+        filings = company.get_filings(form=["10-K", "10-Q"]).latest(1)
+
+        if not filings:
+            return None
+
+        latest = filings[0] if hasattr(filings, "__getitem__") else filings
+        full_text = latest.text()
+
+        if not full_text or not full_text.strip():
+            return None
+
+        # ── 2. Chunk ──────────────────────────────────────────────────────────
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=600,
+            chunk_overlap=100,
+            separators=["\n\n", "\n", " ", ""],
+        )
+        chunks = splitter.split_text(full_text)
+
+        if not chunks:
+            return None
+
+        # ── 3 & 4. Embed + store in ephemeral ChromaDB ────────────────────────
+        # Runs locally — no API calls, no rate limits
+        embeddings = HuggingFaceEmbeddings(
+            model_name="sentence-transformers/all-MiniLM-L6-v2",
+        )
+
+        # EphemeralClient keeps the index purely in-memory — discarded after run
+        chroma_client = chromadb.EphemeralClient()
+        collection_name = f"edgar_{ticker.lower()}"
+
+        vectorstore = Chroma.from_texts(
+            texts=chunks,
+            embedding=embeddings,
+            client=chroma_client,
+            collection_name=collection_name,
+        )
+
+        # ── 5. Query with investment-relevant questions ────────────────────────
+        seen = set()
+        retrieved_chunks = []
+
+        for query in QUERY_STRINGS:
+            results = vectorstore.similarity_search(query, k=1)
+            for doc in results:
+                # Deduplicate by exact text
+                if doc.page_content not in seen:
+                    seen.add(doc.page_content)
+                    retrieved_chunks.append(doc.page_content)
+
+        if not retrieved_chunks:
+            return None
+
+        # ── 6. Join and return in the same shape as fetch_edgar_filing ─────────
+        combined_text = "\n\n---\n\n".join(retrieved_chunks)
+
+        return {
+            "form": latest.form,
+            "filing_date": str(latest.filing_date),
+            "accession_no": latest.accession_no,
+            "text": combined_text,
+        }
+
     except Exception:
         return None
 

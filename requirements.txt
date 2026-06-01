@@ -1,5 +1,8 @@
 langchain>=0.3.0
 langchain-google-genai>=2.0.0
+langchain-text-splitters>=0.3.0
+langchain-community>=0.3.0
+langchain-huggingface>=0.1.0
 langgraph>=0.2.0
 fastapi>=0.115.0
 uvicorn>=0.32.0
@@ -7,3 +10,5 @@ pydantic>=2.9.0
 yfinance>=0.2.40
 edgartools>=2.0.0
 python-dotenv>=1.0.0
+chromadb>=0.6.0
+sentence-transformers>=3.0.0

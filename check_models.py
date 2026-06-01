@@ -1,10 +1,12 @@
-from google import genai
+# Run this from your project root to list available embedding models
 from dotenv import load_dotenv
-import os
-
 load_dotenv()
+import os
+import google as genai
 
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-for model in client.models.list():
-    print(model.name)
+print("Available embedding models:")
+for m in genai.list_models():
+    if "embed" in m.name.lower() or "embedding" in m.supported_generation_methods.__str__().lower():
+        print(f"  {m.name}  —  {m.supported_generation_methods}")

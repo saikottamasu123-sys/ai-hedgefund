@@ -11,7 +11,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from workflows.state import CommitteeState, AnalystOpinion, FinancialData
-from tools.financial_data import fetch_financial_data, format_financial_context, fetch_edgar_filing
+from tools.financial_data import fetch_financial_data, format_financial_context, fetch_edgar_filing_rag
 from prompts.agent_prompts import (
     ANALYST_OUTPUT_INSTRUCTIONS,
     COORDINATOR_SYSTEM,
@@ -28,7 +28,7 @@ from prompts.agent_prompts import (
 
 def get_llm(temperature: float = 0.3):
     return ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash-lite",
+        model="gemini-2.5-flash",
         temperature=temperature,
         google_api_key=os.getenv("GOOGLE_API_KEY"),
     )
@@ -79,7 +79,7 @@ def research_coordinator(state: CommitteeState) -> dict:
 
     # ── SEC EDGAR filing (non-fatal) ──────────────────────────────────────
     print(f"[Coordinator] Fetching SEC EDGAR filing for {ticker}...")
-    edgar_filing = fetch_edgar_filing(ticker)
+    edgar_filing = fetch_edgar_filing_rag(ticker)
 
     if edgar_filing:
         filing_block = (

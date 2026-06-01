@@ -13,7 +13,7 @@ Respond ONLY with a valid JSON object — no markdown fences, no preamble.
 Schema:
 {
   "recommendation": "BUY" | "HOLD" | "SELL",
-  "confidence": <float 0.0–1.0>,
+  "confidence": <float 0.0-1.0>,
   "reasoning": "<2-3 sentence explanation>",
   "key_points": ["<point 1>", "<point 2>", "<point 3>"]
 }
@@ -36,9 +36,9 @@ Prepare a research brief for the investment committee on:
 
 {financial_context}
 
-The financial context above may include an SEC EDGAR filing excerpt (10-K or 10-Q).
-If present, use it — it contains management's own words on business performance, risks,
-and forward-looking statements, which are more authoritative than derived metrics alone.
+The SEC EDGAR excerpt below contains the most relevant passages retrieved from the filing
+(covering financials, risks, management outlook, and guidance) — not raw truncated text.
+Treat it as the most authoritative source in the brief.
 
 Focus on:
 1. Business model and competitive position
