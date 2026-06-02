@@ -204,3 +204,8 @@ python-dotenv>=1.0.0
 chromadb>=0.6.0
 sentence-transformers>=3.0.0
 ```
+
+## Next Up
+
+- [ ] Persist committee results to PostgreSQL (store reports, recommendations, and confidence scores over time)
+- [ ] Build a Next.js frontend dashboard to visualize reports and track sentiment across multiple tickers
